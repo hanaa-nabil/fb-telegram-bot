@@ -2,17 +2,17 @@ name: Facebook to Telegram Bot
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Every 2 hours
-  workflow_dispatch:  # Allow manual run
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -20,7 +20,7 @@ jobs:
         run: pip install facebook-scraper requests
 
       - name: Restore seen IDs cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: seen_ids.json
           key: seen-ids-${{ github.run_id }}
@@ -31,9 +31,3 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
-
-      - name: Save seen IDs cache
-        uses: actions/cache@v3
-        with:
-          path: seen_ids.json
-          key: seen-ids-${{ github.run_id }}
