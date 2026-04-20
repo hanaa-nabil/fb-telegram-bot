@@ -11,7 +11,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 INTERVAL_HOURS = 3
 SEEN_IDS_FILE = "seen_ids.json"
-MAX_WORKERS = 10  # scrape 10 groups at the same time
+MAX_WORKERS = 5
 
 GROUPS = [
     "1LWfnmYHWa", "18dUy6VAFu", "1DdqGBqiWq", "17Tw2E97bJ",
@@ -64,20 +64,30 @@ def send_telegram(text, url, group):
 def scrape_group(group, seen_ids, cutoff_time):
     new_posts = []
     try:
-        for post in get_posts(group, 
-    pages=3, 
-    timeout=30,
-    extra_info=False,
-    youtube_dl=False):
+        print(f"🔍 Scraping: {group}")
+        count = 0
+        for post in get_posts(
+            group,
+            pages=3,
+            timeout=30,
+            extra_info=False,
+            youtube_dl=False
+        ):
+            count += 1
             post_id = post.get("post_id") or post.get("post_url")
             text = post.get("text") or ""
             post_time = post.get("time")
 
+            print(f"   Found post: id={post_id}, time={post_time}, text_len={len(text)}")
+
             if not text or len(text.strip()) < 10:
+                print(f"   ⏭ Skipped: empty text")
                 continue
             if post_id in seen_ids:
+                print(f"   ⏭ Skipped: already seen")
                 continue
             if post_time and post_time < cutoff_time:
+                print(f"   ⏭ Skipped: too old ({post_time})")
                 continue
 
             new_posts.append({
@@ -86,6 +96,9 @@ def scrape_group(group, seen_ids, cutoff_time):
                 "url": post.get("post_url", ""),
                 "group": group
             })
+            print(f"   ✅ Added post!")
+
+        print(f"   Total posts found in {group}: {count}")
 
     except Exception as e:
         print(f"⚠️ Error scraping {group}: {e}")
@@ -96,9 +109,9 @@ def main():
     print(f"🚀 Starting at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     seen_ids = load_seen_ids()
     cutoff_time = datetime.now() - timedelta(hours=INTERVAL_HOURS)
+    print(f"⏰ Cutoff time: {cutoff_time}")
     all_new_posts = []
 
-    # Scrape all groups in parallel
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {
             executor.submit(scrape_group, group, seen_ids, cutoff_time): group
@@ -108,7 +121,7 @@ def main():
             posts = future.result()
             all_new_posts.extend(posts)
 
-    # Remove duplicates by post ID
+    # Remove duplicates
     seen_in_run = set()
     unique_posts = []
     for post in all_new_posts:
