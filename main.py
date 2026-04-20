@@ -64,7 +64,11 @@ def send_telegram(text, url, group):
 def scrape_group(group, seen_ids, cutoff_time):
     new_posts = []
     try:
-        for post in get_posts(group, pages=1, timeout=20):
+        for post in get_posts(group, 
+    pages=3, 
+    timeout=30,
+    extra_info=False,
+    youtube_dl=False):
             post_id = post.get("post_id") or post.get("post_url")
             text = post.get("text") or ""
             post_time = post.get("time")
