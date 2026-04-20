@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 from facebook_scraper import get_posts
 
 # Config
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID", "YOUR_CHAT_ID")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+CHAT_ID = os.environ.get("CHAT_ID", "")
 INTERVAL_HOURS = 3
 SEEN_IDS_FILE = "seen_ids.json"
 
@@ -82,28 +82,24 @@ def scrape_group(group, seen_ids, cutoff_time):
 
     return new_posts
 
-def run():
-    print("🚀 Facebook to Telegram bot started!")
-    while True:
-        print(f"\n⏰ Running at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        seen_ids = load_seen_ids()
-        cutoff_time = datetime.now() - timedelta(hours=INTERVAL_HOURS)
-        sent_count = 0
+def main():
+    print(f"🚀 Running at {datetime.now()}")
+    seen_ids = load_seen_ids()
+    cutoff_time = datetime.now() - timedelta(hours=2)
+    sent_count = 0
 
-        for group in GROUPS:
-            print(f"Scraping group: {group}")
-            posts = scrape_group(group, seen_ids, cutoff_time)
+    for group in GROUPS:
+        print(f"Scraping: {group}")
+        posts = scrape_group(group, seen_ids, cutoff_time)
 
-            for post in posts:
-                send_telegram(post["text"], post["url"])
-                seen_ids.append(post["id"])
-                sent_count += 1
-                time.sleep(2)  # avoid Telegram rate limit
+        for post in posts:
+            send_telegram(post["text"], post["url"])
+            seen_ids.append(post["id"])
+            sent_count += 1
+            time.sleep(1)
 
-        save_seen_ids(seen_ids)
-        print(f"✅ Done! Sent {sent_count} new posts.")
-        print(f"😴 Sleeping for {INTERVAL_HOURS} hours...")
-        time.sleep(INTERVAL_HOURS * 60 * 60)
+    save_seen_ids(seen_ids)
+    print(f"✅ Done! Sent {sent_count} new posts.")
 
 if __name__ == "__main__":
-    run()
+    main()
