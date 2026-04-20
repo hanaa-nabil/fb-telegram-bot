@@ -8,7 +8,7 @@ from facebook_scraper import get_posts
 # Config
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID", "YOUR_CHAT_ID")
-INTERVAL_HOURS = 2
+INTERVAL_HOURS = 3
 SEEN_IDS_FILE = "seen_ids.json"
 
 GROUPS = [
