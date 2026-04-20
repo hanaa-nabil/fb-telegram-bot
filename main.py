@@ -4,12 +4,14 @@ import os
 import requests
 from datetime import datetime, timedelta
 from facebook_scraper import get_posts
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Config
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
 INTERVAL_HOURS = 3
 SEEN_IDS_FILE = "seen_ids.json"
+MAX_WORKERS = 10  # scrape 10 groups at the same time
 
 GROUPS = [
     "1LWfnmYHWa", "18dUy6VAFu", "1DdqGBqiWq", "17Tw2E97bJ",
@@ -42,24 +44,27 @@ def save_seen_ids(seen_ids):
     with open(SEEN_IDS_FILE, "w") as f:
         json.dump(seen_ids[-500:], f)
 
-def send_telegram(text, url):
-    message = f"📢 New Facebook Post\n\n{text[:3000]}\n\n🔗 {url}"
+def send_telegram(text, url, group):
+    message = (
+        f"📢 New post\n"
+        f"👥 {group}\n\n"
+        f"{text[:3000]}\n\n"
+        f"🔗 {url}"
+    )
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={
-                "chat_id": CHAT_ID,
-                "text": message
-            },
+            json={"chat_id": CHAT_ID, "text": message},
             timeout=10
         )
+        print(f"✅ Sent post from {group}")
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"❌ Telegram error: {e}")
 
 def scrape_group(group, seen_ids, cutoff_time):
     new_posts = []
     try:
-        for post in get_posts(group, pages=1, timeout=30):
+        for post in get_posts(group, pages=1, timeout=20):
             post_id = post.get("post_id") or post.get("post_url")
             text = post.get("text") or ""
             post_time = post.get("time")
@@ -74,32 +79,49 @@ def scrape_group(group, seen_ids, cutoff_time):
             new_posts.append({
                 "id": post_id,
                 "text": text,
-                "url": post.get("post_url", "")
+                "url": post.get("post_url", ""),
+                "group": group
             })
 
     except Exception as e:
-        print(f"Error scraping {group}: {e}")
+        print(f"⚠️ Error scraping {group}: {e}")
 
     return new_posts
 
 def main():
-    print(f"🚀 Running at {datetime.now()}")
+    print(f"🚀 Starting at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     seen_ids = load_seen_ids()
-    cutoff_time = datetime.now() - timedelta(hours=2)
+    cutoff_time = datetime.now() - timedelta(hours=INTERVAL_HOURS)
+    all_new_posts = []
+
+    # Scrape all groups in parallel
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(scrape_group, group, seen_ids, cutoff_time): group
+            for group in GROUPS
+        }
+        for future in as_completed(futures):
+            posts = future.result()
+            all_new_posts.extend(posts)
+
+    # Remove duplicates by post ID
+    seen_in_run = set()
+    unique_posts = []
+    for post in all_new_posts:
+        if post["id"] not in seen_in_run:
+            seen_in_run.add(post["id"])
+            unique_posts.append(post)
+
+    # Send to Telegram
     sent_count = 0
-
-    for group in GROUPS:
-        print(f"Scraping: {group}")
-        posts = scrape_group(group, seen_ids, cutoff_time)
-
-        for post in posts:
-            send_telegram(post["text"], post["url"])
-            seen_ids.append(post["id"])
-            sent_count += 1
-            time.sleep(1)
+    for post in unique_posts:
+        send_telegram(post["text"], post["url"], post["group"])
+        seen_ids.append(post["id"])
+        sent_count += 1
+        time.sleep(1)
 
     save_seen_ids(seen_ids)
-    print(f"✅ Done! Sent {sent_count} new posts.")
+    print(f"\n✅ Done! Sent {sent_count} new posts.")
 
 if __name__ == "__main__":
     main()
